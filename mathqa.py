@@ -97,7 +97,7 @@ def Answer(state: State):
         print("Answer: " + str(answer) + "\n")
     else:
         print("Answer: None\n")
-    return {**state, "debug_count": state.get('debug_count', 0)}
+    return {**state, "debug_count": state.get('debug_count', 0), "answer": answer}
 
 def decide_error(state) -> Literal["Executor", "Debug_Feedback"]:
     error = state.get('error', None)
@@ -259,14 +259,6 @@ def main():
     langsmith_parser = subparsers.add_parser('create-dataset', help='Tạo dataset trên LangSmith')
     langsmith_parser.add_argument("--dataset", type=str, required=True, help="Tập dữ liệu để tạo", choices=['GSM8K', 'TATQA', 'TABMWP', 'all'])
     langsmith_parser.add_argument("--limit", type=int, default=300, help="Số lượng mẫu để tạo (mặc định: 300)")
-
-    # Chart generate
-    chart_parser = subparsers.add_parser('chart', help='Tạo biểu đồ trực quan')
-    chart_parser.add_argument('--metric', choices=['tokens', 'latency_sec', 'total_cost'], help='Loại biểu đồ để tạo', required=True)
-    chart_parser.add_argument('--methods', nargs="+", required=True, help='Các phương pháp để so sánh', choices=['Zero-shot', 'PoT', 'CoT', 'PaL', 'MultiAgent'])
-    chart_parser.add_argument('--datasets', nargs="+", required=True, help='Các tập dữ liệu để so sánh', choices=['GSM8K', 'TATQA', 'TABMWP'])
-    chart_parser.add_argument('--experiment_id', nargs="+", type=str, required=True, help='ID của thí nghiệm trên LangSmith')
-    chart_parser.add_argument('--save', action='store_true', help='Lưu biểu đồ vào tệp')
 
     # Show datasets
     list_parser = subparsers.add_parser('datasets', help='Hiển thị danh sách các tập dữ liệu có sẵn')

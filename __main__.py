@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -14,10 +15,11 @@ def load_data(method, dataset, folder="results"):
 def plot_bar_subplots(data_dict, metrics, methods, datasets, aspt):
     # Định nghĩa màu sắc nổi bật cho các methods
     highlight_colors = {
-        'PaL': '#F28E2B',      
-        'CoT': '#e74c3c',      
-        'Zero-shot': '#76B7B2', 
-        'PoT': '#3498db'       
+        'PaL': '#F28E2B', # Cam
+        'CoT': '#e74c3c', # Đỏ
+        'Zero-shot': '#76B7B2', # Xanh lục
+        'PoT': '#3498db', # Xanh dương
+        'MultiAgent': "#74CBA2", # Xanh lá   
     }
     # Tạo palette màu cho các method theo thứ tự
     custom_colors = [highlight_colors.get(method, '#DDA0DD') for method in methods]  # Mặc định tím nhạt
@@ -155,41 +157,94 @@ def plot_bar_subplots(data_dict, metrics, methods, datasets, aspt):
         plt.subplots_adjust(bottom=0.18, top=0.92, left=0.08, right=0.92, wspace=0.3)
         plt.show()
 
+def load_csv(dataset, folder="results"):
+    file_path = os.path.join(folder, f"MultiAgent_{dataset}-RMVe.csv")
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"Không tìm thấy file: {file_path}")
+    return pd.read_csv(file_path)
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Plotting script for comparing prompting techniques across datasets")
-    parser.add_argument("--methods", nargs="+", required=True, help="One or more prompting techniques to use", choices=['Zero-shot', 'PoT', 'CoT',  'PaL', 'MultiAgent'])
-    parser.add_argument("--datasets", nargs="+", required=True, help="One or more datasets to test on", choices=['GSM8K', 'TATQA', 'TABMWP'])
-    parser.add_argument("--metric",  required=True, choices=['tokens', 'latency_sec', 'total_cost'])
+    
+    parser = argparse.ArgumentParser()
+    print('-' * 50)
+
+    subparsers = parser.add_subparsers(dest='command', title='Danh sách lệnh được hỗ trợ', description="Chọn một trong các lệnh bên dưới để sử dụng")
+
+    # Measure metrics
+    metrics_parser = subparsers.add_parser('measure', help='Đo lường các metrics của các phương pháp prompting')
+    metrics_parser.add_argument("--methods", nargs="+", required=True, help="Các phương pháp prompting để sử dụng", choices=['Zero-shot', 'PoT', 'CoT',  'PaL', 'MultiAgent'])
+    metrics_parser.add_argument("--datasets", nargs="+", required=True, help="Các tập dữ liệu để kiểm tra", choices=['GSM8K', 'TATQA', 'TABMWP'])
+    metrics_parser.add_argument("--metric",  required=True, help="Metric để đo lường", choices=['tokens', 'latency_sec', 'total_cost'])
+
+    # Remove agent
+    remove_parser = subparsers.add_parser('remove', help='Loại bỏ tác tử Verifier khỏi hệ thống')
+    remove_parser.add_argument("--datasets", nargs="+", required=True, help="Các tập dữ liệu để kiểm tra", choices=['GSM8K', 'TATQA', 'TABMWP', 'all'], default='all')
+
     args = parser.parse_args()
 
-    methods = args.methods
-    datasets = args.datasets
+    try:
+        if args.command == 'measure':
+            methods = args.methods
+            datasets = args.datasets
 
-    metrics = {
-        "is_correct": "Accuracy",
-    }
+            metrics = {
+                "is_correct": "Accuracy",
+            }
 
-    data_dict = {}
-    missing = []
+            data_dict = {}
+            missing = []
 
-    for method in methods:
-        for dataset in datasets:
-            try:
-                df = load_data(method, dataset)
-                data_dict[(method, dataset)] = df
-            except FileNotFoundError:
-                missing.append(f"{method}_{dataset}.json")
+            for method in methods:
+                for dataset in datasets:
+                    try:
+                        df = load_data(method, dataset)
+                        data_dict[(method, dataset)] = df
+                    except FileNotFoundError:
+                        missing.append(f"{method}_{dataset}.json")
 
-    if not data_dict:
-        print("Không có file hợp lệ nào được load. Kiểm tra lại tên file và thư mục `results/`.")
-        return
+            if not data_dict:
+                print("Không có file hợp lệ nào được load. Kiểm tra lại tên file và thư mục `results/`.")
+                return
 
-    if missing:
-        print("Một số file bị thiếu:")
-        for file in missing:
-            print(f" - {file}")
+            if missing:
+                print("Một số file bị thiếu:")
+                for file in missing:
+                    print(f" - {file}")
 
-    plot_bar_subplots(data_dict, metrics, methods, datasets, args.metric)
+            plot_bar_subplots(data_dict, metrics, methods, datasets, args.metric)
 
+        elif args.command == 'remove':
+            datasets = args.datasets
+            if 'all' in datasets:
+                datasets = ['GSM8K', 'TATQA', 'TABMWP']
+
+            # Dictionary để lưu trữ tất cả các dataframe
+            dataframes = {}
+            
+            for dataset in datasets:
+                try:
+                    df = load_csv(dataset)
+                    dataframes[dataset] = df  # Lưu dataframe vào dictionary
+                except FileNotFoundError:
+                    print(f"Không tìm thấy file cho tập dữ liệu {dataset}. Vui lòng kiểm tra lại.")
+            
+            if not dataframes:
+                print("Không có dữ liệu nào được load. Vui lòng kiểm tra lại tên file và thư mục `results/`.")
+                return
+
+            plot_bar_subplots(dataframes, metrics, 'MultiAgent', datasets, args.metric)
+
+        else:
+            parser.print_help()
+
+    except KeyboardInterrupt:
+        print("\nNgười dùng đã ngắt quá trình")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\nLỗi: {e}")
+        sys.exit(1)
+
+    
 if __name__ == "__main__":
     main()
