@@ -173,24 +173,24 @@ def main():
 
     # Measure metrics
     metrics_parser = subparsers.add_parser('measure', help='Đo lường các metrics của các phương pháp prompting')
-    metrics_parser.add_argument("--methods", nargs="+", required=True, help="Các phương pháp prompting để sử dụng", choices=['Zero-shot', 'PoT', 'CoT',  'PaL', 'MultiAgent'])
-    metrics_parser.add_argument("--datasets", nargs="+", required=True, help="Các tập dữ liệu để kiểm tra", choices=['GSM8K', 'TATQA', 'TABMWP'])
-    metrics_parser.add_argument("--metric",  required=True, help="Metric để đo lường", choices=['tokens', 'latency_sec', 'total_cost'])
+    metrics_parser.add_argument("--methods", "-mth", nargs="+", required=True, help="Các phương pháp prompting để sử dụng", choices=['Zero-shot', 'PoT', 'CoT',  'PaL', 'MultiAgent'])
+    metrics_parser.add_argument("--datasets", "-d", nargs="+", required=True, help="Các tập dữ liệu để kiểm tra", choices=['GSM8K', 'TATQA', 'TABMWP'])
+    metrics_parser.add_argument("--metric",  "-mtr", required=True, help="Metric để đo lường", choices=['tokens', 'latency_sec', 'total_cost'])
 
     # Remove agent
     remove_parser = subparsers.add_parser('remove', help='Loại bỏ tác tử Verifier khỏi hệ thống')
-    remove_parser.add_argument("--datasets", nargs="+", required=True, help="Các tập dữ liệu để kiểm tra", choices=['GSM8K', 'TATQA', 'TABMWP', 'all'], default='all')
+    remove_parser.add_argument("--datasets", "-d", nargs="+", required=True, help="Các tập dữ liệu để kiểm tra", choices=['GSM8K', 'TATQA', 'TABMWP', 'all'], default='all')
+    remove_parser.add_argument("--metric",  "-m", required=True, help="Metric để đo lường", choices=['tokens', 'latency_sec', 'total_cost'])
 
     args = parser.parse_args()
 
+    metrics = {
+        "is_correct": "Accuracy",
+    }
     try:
         if args.command == 'measure':
             methods = args.methods
             datasets = args.datasets
-
-            metrics = {
-                "is_correct": "Accuracy",
-            }
 
             data_dict = {}
             missing = []
