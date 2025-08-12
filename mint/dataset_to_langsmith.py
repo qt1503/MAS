@@ -22,24 +22,24 @@ class DatasetLoad:
     def _load_datasets(self):
         """Load all datasets from files."""
         # Load GSM8K dataset
-        file_path = os.path.join(DATA_DIR('GSM8K'), 'test.jsonl')
+        file_path = os.path.join(DATA_DIR('FILTER_DATASET'), 'gsm8k.jsonl')
         with open(file_path, "r", encoding="utf-8") as f:
             self.gsm8k = [json.loads(line) for line in f]
         
         # Load TABMWP dataset
-        folder_path = DATA_DIR('TABMWP/tabmwp')
-        filename = "problems_test.json"
+        folder_path = DATA_DIR('FILTER_DATASET')
+        filename = "tabmwp.json"
         file_path = os.path.join(folder_path, filename)
         with open(file_path, "r", encoding="utf-8") as f:
             tabmwp_pre = json.load(f)
         
         self.tabmwp = []
-        for key, item in tabmwp_pre.items():
+        for item in tabmwp_pre:
             self.tabmwp.extend(standardize_item(item, "tabmwp"))
         
         # Load TATQA dataset
-        folder_path = DATA_DIR('TATQA')
-        filename = "tatqa_dataset_train.json"
+        folder_path = DATA_DIR('FILTER_DATASET')
+        filename = "tatqa.json"
         file_path = os.path.join(folder_path, filename)
         with open(file_path, "r", encoding="utf-8") as f:
             raw_data_tatqa = json.load(f)
