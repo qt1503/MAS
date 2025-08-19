@@ -2,21 +2,25 @@ from typing import Literal, Optional, TypedDict
 from langgraph.graph import StateGraph, START, END
 from pydantic import BaseModel
 from mint.PoT import ProgramOfThoughtsPrompt
-from mint.chart import ChartGenerate, ExperimentDataFetcher
+from mint.CoT import ChainOfThoughtPrompt
+from mint.PaL import ProgramAidedLanguagePrompt
+from mint.Zero_shot import ZeroShotPrompt
+
 from mint.dataset_to_langsmith import DatasetToLangsmith
 from mint.testing.test import TestingDataset
 from langgraph.checkpoint.memory import MemorySaver
 from langsmith import Client
 from dotenv import load_dotenv
+from streamlit_extras.stylable_container import stylable_container
 
 import argparse
+import streamlit as st
+import subprocess
 import re
 import sys
 import uuid
 import os
 import io
-import contextlib
-import signal
 
 
 class State(TypedDict):
@@ -25,79 +29,114 @@ class State(TypedDict):
     context: Optional[str]
     error: Optional[str]
     debug_count: int  
-    show_reasoning: bool
 
 class IntermediateProgram(BaseModel):
     program: str
+def single_question(question: str, method: str):
+    match(method):
+        case "Zero-shot":
+            prompt = ZeroShotPrompt()
+            st.markdown(f"**Final Answer:** {prompt.solve(question)}")
+        case "CoT":
+            prompt = ChainOfThoughtPrompt()
+            answer, steps = prompt.solve(question)
+            st.markdown(f"**Reasoning:**")
+            for i, step in enumerate(steps):
+                st.write(f"Step {i+1}: {step.explanation} -> {step.output}")
+            st.markdown(f"**Final Answer:** {answer}")
+        case "PaL":
+            prompt = ProgramAidedLanguagePrompt()
+            code = prompt.solve(question)
+            st.markdown("**Generated code:**")
+            st.code(code, language="python")
+            st.markdown(f"**Final Answer:** {prompt.exec_node(code)}")
+        case "PoT":
+            prompt = ProgramOfThoughtsPrompt()
+            code = prompt.solve(question, None)
+            st.markdown("**Generated code:**")
+            st.code(code, language="python")
+            st.markdown(f"**Final Answer:** {prompt.exec_node(code)}")
+        case "Multi-Agent":
+            prompt = ProgramOfThoughtsPrompt()
 
-def single_question(question: str, context: Optional[str] = None, show_reasoning: bool = False):
-    
-    prompt = ProgramOfThoughtsPrompt()
+            builder = StateGraph(State)
+            builder.add_node("PreProcessing", PreProcessing)
+            builder.add_node("CodeGenerator", lambda state: CodeGenerator(state, prompt))
+            builder.add_node("Verifier", lambda state: Verifier(state, prompt))
+            builder.add_node("Executor", lambda state: Executor(state, prompt))
+            builder.add_node("Debug_Feedback", lambda state: Debug_Feedback(state, prompt))
+            builder.add_node("Answer", Answer)
 
-    builder = StateGraph(State)
-    builder.add_node("PreProcessing", PreProcessing)
-    builder.add_node("CodeGenerator", lambda state: CodeGenerator(state, prompt))
-    builder.add_node("Verifier", lambda state: Verifier(state, prompt))
-    builder.add_node("Executor", lambda state: Executor(state, prompt))
-    builder.add_node("Debug_Feedback", lambda state: Debug_Feedback(state, prompt))
-    builder.add_node("Answer", Answer)
+            builder.add_edge(START, "PreProcessing")
+            builder.add_edge("PreProcessing", "CodeGenerator")
+            builder.add_edge("CodeGenerator", "Verifier")
+            builder.add_conditional_edges("Verifier", decide_error)
+            builder.add_conditional_edges("Executor", decide_executor)
+            builder.add_edge("Debug_Feedback", "CodeGenerator")
+            builder.add_edge("Answer", END)
+            memory = MemorySaver()
+            graph = builder.compile(checkpointer=memory)
 
-    builder.add_edge(START, "PreProcessing")
-    builder.add_edge("PreProcessing", "CodeGenerator")
-    builder.add_edge("CodeGenerator", "Verifier")
-    builder.add_conditional_edges("Verifier", decide_error)
-    builder.add_conditional_edges("Executor", decide_executor)
-    builder.add_edge("Debug_Feedback", "CodeGenerator")
-    builder.add_edge("Answer", END)
-    memory = MemorySaver()
-    graph = builder.compile(checkpointer=memory)
+            state = State(
+                question=question,
+                context=None,
+                answer=None,
+                error=None,
+                debug_count=0,
+            )
 
-    state = State(
-        question=question,
-        context=context,
-        answer=None,
-        error=None,
-        debug_count=0,
-        show_reasoning=show_reasoning
-    )
-
-    graph.invoke(
-        input=state,
-        config={"configurable": {"thread_id": str(uuid.uuid4())}}
-    )
-
+            graph.invoke(
+                input=state,
+                config={"configurable": {"thread_id": str(uuid.uuid4())}}
+            )
+        case _:
+            pass
 
 def PreProcessing(state: State):
     state["question"] = re.sub(r'\s+', ' ', state["question"].strip())                      
-    print("Question: " + state["question"] + "\n")
     return {**state}
 
 def CodeGenerator(state: State, prompt):
-    generated_code = prompt.solve(state["question"], state["context"], state["show_reasoning"])
-    return {**state, "debug_count": state.get('debug_count', 0), "answer": generated_code}
+    if state["error"] is None:
+        generated_code = prompt.solve(state["question"], state["context"])
+        st.markdown("**Generated code:**")
+        st.code(generated_code, language="python")
+        return {**state, "answer": generated_code}
+    else:
+        return{**state, "error": None}
+    
 
 def Verifier(state: State, prompt):
     error = prompt.check_syntax_and_logic(state["answer"])
-    return {**state, "debug_count": state.get('debug_count', 0), "error": error}
+    return {**state, "error": error}
 
 def Executor (state: State, prompt):
     result, success = prompt.safe_execute(str(state["answer"]))
     if success:
-        return {**state, "debug_count": state.get('debug_count', 0), "answer": result}
+        return {**state, "answer": result}
     else:
-        return {**state, "debug_count": state.get('debug_count', 0), "error": result}
+        return {**state, "error": result}
 
 def Debug_Feedback(state: State, prompt):
+    error = state.get("error")
+    st.markdown(f"**Error:** {error}")
+    if state["debug_count"] == 0:
+        st.markdown("**First debug attempt:**")
+    else:
+        st.markdown("**Second debug attempt:**")
     fixed_code = prompt.fix_error(state["answer"], state["error"])
-    return {**state, "debug_count": state.get('debug_count', 0) + 1, "error": None, "answer": fixed_code}
+    st.code(fixed_code, language="python")
+    return {**state, "debug_count": state.get('debug_count', 0) + 1, "answer": fixed_code}
 
 def Answer(state: State):
     answer = state.get("answer")
-    if answer is not None:
-        print("Answer: " + str(answer) + "\n")
+    debug_count = state.get("debug_count")
+    if debug_count == 2:
+        st.markdown("**Final Answer**: 9999")
+        return {**state, "answer": 9999}  # Return a default value if debug_count == 2
     else:
-        print("Answer: None\n")
-    return {**state, "debug_count": state.get('debug_count', 0), "answer": answer}
+        st.markdown(f"**Final Answer**: {answer}")
+        return {**state}
 
 def decide_error(state) -> Literal["Executor", "Debug_Feedback"]:
     error = state.get('error', None)
@@ -238,17 +277,75 @@ def create_dataset_to_langsmith(dataset: str, limit: int):
             print(f"  - {name.upper()}: {ds.id}")
     else:
         raise ValueError(f"Dataset không hợp lệ: {dataset}. Sử dụng 'GSM8K', 'TATQA', 'TABMWP', hoặc 'all'")
-  
+        
+
 def main():
+    st.markdown("""
+    <style>
+    /* Nền gradient cho toàn bộ trang */
+    .stApp {
+        background: linear-gradient(135deg, #76B7B2 0%, #5FA5C8 50%, #3498db 100%);
+    }
+    header[data-testid="stHeader"] {
+        display: none;
+    }
+    footer {
+        display: none;
+    }
+    .css-14xtw13.e8zbici0 {
+        display: none;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+st.set_page_config(
+    page_title="MathQA_MAS", 
+    page_icon="💭",              
+    layout="centered"               
+)    
+
+with stylable_container(
+    key="styled",
+    css_styles="""
+        {
+            background: white;
+            border-radius: 36px;
+            padding: 36px;
+            width:100%;
+            overflow: auto;      
+        }
+    """
+):
+    with st.container(width=1500, height=700, horizontal_alignment="center", gap="medium", border=False):
+        st.title("MathQA_MAS", anchor=False, width="content")
+        question = st.text_area("❓ Question", height="content", placeholder="Please enter your question...")
+        method = st.selectbox(
+        "🔧 Method",
+        ("Zero-shot", "CoT", "PaL", "PoT", "Multi-Agent"),
+        index=None,
+        placeholder="Select a method...",)
+        
+        isClicked = st.button("Submit 🚀", width="stretch")
+
+        if isClicked:
+            if question.strip() == "" and method is None:
+                st.error("Please enter a question and select a method before submitting.")
+            elif question.strip() == "":
+                st.error("Please enter a question before submitting.")
+            elif method is None:
+                st.error("Please select a method before submitting.")
+            else:
+                single_question(question, method)
+
     parser = argparse.ArgumentParser(description="MathQA")
     print('-' * 50)
     subparsers = parser.add_subparsers(dest='command', title='Danh sách lệnh được hỗ trợ', description="Chọn một trong các lệnh bên dưới để sử dụng")
 
     # Single question
-    single_parser = subparsers.add_parser('solve', help='Giải quyết một câu hỏi')
-    single_parser.add_argument("--question", type=str, required=True, help="Câu hỏi cần giải quyết")
-    single_parser.add_argument("--context", help="Ngữ cảnh tùy chọn để sử dụng", default="")
-    single_parser.add_argument("--show-reasoning", action='store_true', help="Hiển thị mã nguồn đã được sinh ra", default=False)
+    single_parser = subparsers.add_parser('solve', help='Hiển thị giao diện giải quyết câu hỏi')
+    #single_parser.add_argument("--question", type=str, required=True, help="Câu hỏi cần giải quyết")
+    #single_parser.add_argument("--context", help="Ngữ cảnh tùy chọn để sử dụng", default="")
+    #single_parser.add_argument("--show-reasoning", action='store_true', help="Hiển thị mã nguồn đã được sinh ra", default=False)
 
     # Dataset testing
     test_parser = subparsers.add_parser('test', help='Kiểm tra một tập dữ liệu trên LangSmith')
@@ -267,7 +364,7 @@ def main():
 
     try:
         if args.command == 'solve':
-            single_question(args.question, args.context, args.show_reasoning)
+            single_question()
 
         elif args.command == 'test':
             testing_dataset(args.method, args.dataset)
@@ -281,13 +378,6 @@ def main():
             print("GSM8K - bao gồm 8,500 bài toán toán học chất lượng cao cho học sinh tiểu học do các nhà văn vấn đề con người tạo ra.\n")
             print("TATQA - chứa 16,552 câu hỏi liên quan đến 2,757 ngữ cảnh kết hợp từ các báo cáo tài chính thực tế.\n")
             print("TABMWP - chứa 38,431 bài toán mở cấp độ yêu cầu lý luận toán học trên cả dữ liệu văn bản và bảng.\n")
-
-        elif args.command == 'chart':
-            fetcher = ExperimentDataFetcher(args.experiment_id)
-            fetcher.fetch_data()
-
-            chart_generator = ChartGenerate(args.methods, args.datasets, args.metric)
-            chart_generator.generate_chart()
         else:
             parser.print_help()
 

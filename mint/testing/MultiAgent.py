@@ -41,63 +41,51 @@ class MultiAgentTesting:
         return {**state}
 
     def CodeGenerator(self, state: State):
-        generated_code = self.prompt.solve(state["question"], state["context"], state["show_reasoning"])
-        return {**state, "debug_count": state.get('debug_count', 0), "answer": generated_code}
+        if state["error"] is None:
+            generated_code = self.prompt.solve(state["question"], state["context"], state["show_reasoning"])
+            return {**state, "answer": generated_code}
+        else:
+            return{**state, "error": None}
 
     def Verifier(self, state: State):
-        print(f"🔍 Verifier: Checking code...")
         error = self.prompt.check_syntax_and_logic(state["answer"])
-        if error:
-            print(f"❌ Verifier: Error found - {error[:100]}...")
-        else:
-            print("✅ Verifier: No errors found")
-        return {**state, "debug_count": state.get('debug_count', 0), "error": error}
+        return {**state, "error": error}
 
     def Executor(self, state: State):
-        print(f"⚡ Executor: Executing code...")
         # Sử dụng prompt.safe_execute đã được cải thiện bảo mật
         result, success = self.prompt.safe_execute(str(state["answer"]))
         if success:
-            print(f"✅ Executor: Success - {result}")
-            return {**state, "debug_count": state.get('debug_count', 0), "answer": result}
+            return {**state, "answer": result}
         else:
-            print(f"❌ Executor: Failed - {result[:100]}...")
-            return {**state, "debug_count": state.get('debug_count', 0), "error": result}
+            return {**state, "error": result}
 
     def Debug_Feedback(self, state: State):
-        print(f"🔧 Debug_Feedback: Fixing error - {state['error'][:100]}...")
         fixed_code = self.prompt.fix_error(state["answer"], state["error"])
-        print(f"✅ Debug_Feedback: Code fixed, debug_count: {state.get('debug_count', 0) + 1}")
-        return {**state, "debug_count": state.get('debug_count', 0) + 1, "error": None, "answer": fixed_code}
+        return {**state, "debug_count": state.get('debug_count', 0) + 1, "answer": fixed_code}
 
     def Answer(self, state: State):
-        answer = state.get("answer")
-        return {**state, "debug_count": state.get('debug_count', 0)}
+        debug_count = state.get("debug_count")
+        if debug_count == 2:
+            return {**state, "answer": 9999}  # Return a default value if debug_count == 2
+        else:
+            return {**state}
 
     def decide_error(self, state) -> Literal["Executor", "Debug_Feedback"]:
         error = state.get('error', None)
         debug_count = state.get('debug_count', 0)
-        print(f"🔍 decide_error: error={error}, debug_count={debug_count}")
         if debug_count >= 2:
-            print("➡️ Going to Executor (max debug reached)")
             return "Executor"
         if error is None:
-            print("➡️ Going to Executor (no error)")
             return "Executor"
-        print("➡️ Going to Debug_Feedback (error found)")
         return "Debug_Feedback"
 
     def decide_executor(self, state) -> Literal["Answer", "Debug_Feedback"]:
         error = state.get('error', None)
         debug_count = state.get('debug_count', 0)
-        print(f"🔍 decide_executor: error={error}, debug_count={debug_count}")
         if debug_count >= 2:
-            print("➡️ Going to Answer (max debug reached)")
             return "Answer"
         if error is None:
-            print("➡️ Going to Answer (no error)")
             return "Answer"
-        print("➡️ Going to Debug_Feedback (error found)")
         return "Debug_Feedback"
 
     def build_graph(self):

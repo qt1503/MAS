@@ -84,7 +84,7 @@ class ZeroShotTesting:
         else:
             name_dataset = "TABMWP"
 
-        @traceable(run_type="chain")
+        @traceable(run_type="chain", name="Zero-shot")
         def target_function(inputs: dict):
             question = inputs["question"]
             context = inputs.get("context", "")
