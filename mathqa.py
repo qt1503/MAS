@@ -284,7 +284,8 @@ def main():
     <style>
     /* Nền gradient cho toàn bộ trang */
     .stApp {
-        background: linear-gradient(135deg, #76B7B2 0%, #5FA5C8 50%, #3498db 100%);
+        background: linear-gradient(95deg, #76B7B2 0%, #5FA5C8 50%, #3498DB 100%);
+        min-height: 100vh;
     }
     header[data-testid="stHeader"] {
         display: none;
@@ -295,47 +296,82 @@ def main():
     .css-14xtw13.e8zbici0 {
         display: none;
     }
+    .stButton>button:hover {
+        background-color: #FF9AA2;   
+        color: white;
+        transition: 0.3s;            
+    }
+    
+    /* Đảm bảo container chính tự động mở rộng */
+    .main .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+        max-width: none;
+    }
+    
+    /* Style cho kết quả */
+    .result-section {
+        margin-top: 2rem;
+        padding: 1.5rem;
+        background: #f8f9fa;
+        border-radius: 15px;
+        border-left: 4px solid #3498DB;
+    }
+    
+    /* Font size customization */
+    /* Title */
+    h1 {
+        font-size: 2.5rem !important;
+        font-weight: 700 !important;
+    }
+    
+    /* Đảm bảo text area và selectbox responsive */
+    .stTextArea textarea {
+        min-height: 100px !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-st.set_page_config(
-    page_title="MathQA_MAS", 
-    page_icon="💭",              
-    layout="centered"               
-)    
+    st.set_page_config(
+        page_title="MathQA_MAS", 
+        page_icon="💭",              
+        layout="centered"               
+    )    
 
-with stylable_container(
-    key="styled",
-    css_styles="""
-        {
-            background: white;
-            border-radius: 36px;
-            padding: 36px;
-            width:100%;
-            overflow: auto;      
-        }
-    """
-):
-    with st.container(width=1500, height=700, horizontal_alignment="center", gap="medium", border=False):
-        st.title("MathQA_MAS", anchor=False, width="content")
-        question = st.text_area("❓ Question", height="content", placeholder="Please enter your question...")
-        method = st.selectbox(
-        "🔧 Method",
-        ("Zero-shot", "CoT", "PaL", "PoT", "Multi-Agent"),
-        index=None,
-        placeholder="Select a method...",)
-        
-        isClicked = st.button("Submit 🚀", width="stretch")
+    with stylable_container(
+        key="styled",
+        css_styles="""
+            {
+                background: white;
+                border-radius: 36px;
+                padding: 48px;
+                width: 100%;
+                min-height: 600px;
+                overflow: visible;
+            }
+        """
+    ):
+        with st.container(horizontal_alignment="center", gap="medium", border=False):
+            st.title("MathQA_MAS", anchor=False, width="content")
+            question = st.text_area("❓ Question", height="content", placeholder="Please enter your question...")
+            method = st.selectbox(
+            "🔧 Method",
+            ("Zero-shot", "CoT", "PaL", "PoT", "Multi-Agent"),
+            index=None,
+            placeholder="Select a method...",)
+            
+            isClicked = st.button("Submit 🚀", width="stretch")
 
-        if isClicked:
-            if question.strip() == "" and method is None:
-                st.error("Please enter a question and select a method before submitting.")
-            elif question.strip() == "":
-                st.error("Please enter a question before submitting.")
-            elif method is None:
-                st.error("Please select a method before submitting.")
-            else:
-                single_question(question, method)
+            if isClicked:
+                if question.strip() == "" and method is None:
+                    st.error("Please enter a question and select a method before submitting.")
+                elif question.strip() == "":
+                    st.error("Please enter a question before submitting.")
+                elif method is None:
+                    st.error("Please select a method before submitting.")
+                else:
+                    st.divider()
+                    single_question(question, method)
 
     parser = argparse.ArgumentParser(description="MathQA")
     print('-' * 50)
