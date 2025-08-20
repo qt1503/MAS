@@ -25,19 +25,20 @@ class ProgramOfThoughtsPrompt:
         self.temperature = os.getenv("TEMPERATURE")
         self.model = init_chat_model(self.model_name, model_provider=self.model_provider, temperature=self.temperature)
 
-    def solve(self, question: str, context: Optional[str]):
+    def solve(self, question: str, context: Optional[str], select_fewshot:str):
+        context_str = f"# Context:\n{context}\n" 
         pot_messages = [
         SystemMessage("You will write python program to solve math problems."),
         HumanMessage(content=f"""
                      
-        {few_shot_gsm8k}
+        {select_fewshot}
 
         # Include a final answer as a single number, no units or symbols.
         # For each step, provide a very brief explanation in one short sentence only.
         # The final answer 'MUST' be assigned the variable 'result'.
         # If the question includes time points, pay attention to time formats.
         # Before returning the final result, DOUBLE-CHECK each variable assignment and calculation to ensure they match the problem statement.
-
+        {context_str}
         # Question: {question}
         """)]
         model_invoke=self.model.invoke(pot_messages)

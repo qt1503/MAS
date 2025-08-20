@@ -1,13 +1,15 @@
-from typing import Literal, Optional, TypedDict
+from typing import List, Literal, Optional, TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 from langsmith import traceable, Client, evaluate
 from dotenv import load_dotenv
+from datetime import datetime
+from .prompts.few_shot_PoT import few_shot_tatqa, few_shot_gsm8k, few_shot_tabmwp
+
 import os
 import json
 import re
 import uuid
-from datetime import datetime
 import sys
 
 # Add the mint directory to the path
@@ -23,18 +25,24 @@ class State(TypedDict):
     context: Optional[str]
     error: Optional[str]
     debug_count: int  
-    show_reasoning: bool
 
 class MultiAgentTesting:
     def __init__(self):
         load_dotenv()
         self.all_results = []
         self.name = ""
-        self.prompt = ProgramOfThoughtsPrompt()  # Sử dụng PoT với safe_execute đã cải thiện
+        self.prompt = ProgramOfThoughtsPrompt()
+        self.current_debug_history = []
         
     def setup_dataset(self, name: str):
         """Setup dataset-specific configurations"""
         self.name = name.lower()
+        if self.name == "gsm8k":
+            self.select_fewshot = few_shot_gsm8k
+        elif self.name == "tatqa":
+            self.select_fewshot = few_shot_tatqa
+        else:
+            self.select_fewshot = few_shot_tabmwp
 
     def PreProcessing(self, state: State):
         state["question"] = re.sub(r'\s+', ' ', state["question"].strip())                      
@@ -42,7 +50,7 @@ class MultiAgentTesting:
 
     def CodeGenerator(self, state: State):
         if state["error"] is None:
-            generated_code = self.prompt.solve(state["question"], state["context"], state["show_reasoning"])
+            generated_code = self.prompt.solve(state["question"], state["context"], self.select_fewshot)
             return {**state, "answer": generated_code}
         else:
             return{**state, "error": None}
@@ -61,6 +69,11 @@ class MultiAgentTesting:
 
     def Debug_Feedback(self, state: State):
         fixed_code = self.prompt.fix_error(state["answer"], state["error"])
+        debug_step = {
+            "error": state["error"],
+            "fixed_code": fixed_code
+        }
+        self.current_debug_history.append(debug_step)
         return {**state, "debug_count": state.get('debug_count', 0) + 1, "answer": fixed_code}
 
     def Answer(self, state: State):
@@ -111,6 +124,9 @@ class MultiAgentTesting:
 
     def run_graph(self, inputs: dict):
         """Run the multi-agent system on a single question"""
+        # Reset debug history cho run mới
+        self.current_debug_history = []
+        
         graph = self.build_graph()
         
         state = State(
@@ -119,7 +135,6 @@ class MultiAgentTesting:
             answer=None,
             error=None,
             debug_count=0,
-            show_reasoning=False
         )
 
         final_state = graph.invoke(
@@ -129,8 +144,7 @@ class MultiAgentTesting:
         
         return {
             "final_answer": str(final_state.get("answer", "")),
-            "debug_count": final_state.get("debug_count", 0),
-            "response": f"Multi-agent system with {final_state.get('debug_count', 0)} debug iterations"
+            "debug": [{"Error": step["error"], "Fixed Code": step["fixed_code"]} for step in self.current_debug_history],
         }
 
     @staticmethod

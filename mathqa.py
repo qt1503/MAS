@@ -5,7 +5,7 @@ from mint.PoT import ProgramOfThoughtsPrompt
 from mint.CoT import ChainOfThoughtPrompt
 from mint.PaL import ProgramAidedLanguagePrompt
 from mint.Zero_shot import ZeroShotPrompt
-
+from few_shot_PoT import few_shot_gsm8k
 from mint.dataset_to_langsmith import DatasetToLangsmith
 from mint.testing.test import TestingDataset
 from langgraph.checkpoint.memory import MemorySaver
@@ -98,7 +98,7 @@ def PreProcessing(state: State):
 
 def CodeGenerator(state: State, prompt):
     if state["error"] is None:
-        generated_code = prompt.solve(state["question"], state["context"])
+        generated_code = prompt.solve(state["question"], state["context"], few_shot_gsm8k)
         st.markdown("**Generated code:**")
         st.code(generated_code, language="python")
         return {**state, "answer": generated_code}
@@ -341,12 +341,6 @@ with stylable_container(
     print('-' * 50)
     subparsers = parser.add_subparsers(dest='command', title='Danh sách lệnh được hỗ trợ', description="Chọn một trong các lệnh bên dưới để sử dụng")
 
-    # Single question
-    single_parser = subparsers.add_parser('solve', help='Hiển thị giao diện giải quyết câu hỏi')
-    #single_parser.add_argument("--question", type=str, required=True, help="Câu hỏi cần giải quyết")
-    #single_parser.add_argument("--context", help="Ngữ cảnh tùy chọn để sử dụng", default="")
-    #single_parser.add_argument("--show-reasoning", action='store_true', help="Hiển thị mã nguồn đã được sinh ra", default=False)
-
     # Dataset testing
     test_parser = subparsers.add_parser('test', help='Kiểm tra một tập dữ liệu trên LangSmith')
     test_parser.add_argument("--method", type=str, required=True, help="Phương thức sử dụng", choices=['Zero_shot', 'PoT', 'CoT', 'PaL', 'MultiAgent', 'all'])
@@ -363,10 +357,7 @@ with stylable_container(
     args = parser.parse_args()
 
     try:
-        if args.command == 'solve':
-            single_question()
-
-        elif args.command == 'test':
+        if args.command == 'test':
             testing_dataset(args.method, args.dataset)
 
         elif args.command == 'create-dataset':
