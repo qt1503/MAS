@@ -4,20 +4,18 @@ import ast
 import io
 import contextlib
 import builtins
-import signal
+import threading
+import time
 
 from typing import Optional
 from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage, SystemMessage
-from few_shot_PoT import few_shot_tatqa
+from few_shot_PoT import few_shot_gsm8k
 
 
 class TimeoutException(Exception):
     pass
-
-def timeout_handler(signum, frame):
-    raise TimeoutException("Code execution timed out.")
 
 class ProgramOfThoughtsPrompt:
     def __init__(self, model_name: str = "", model_provider: str = "", temperature: float = 0.0):
@@ -27,27 +25,24 @@ class ProgramOfThoughtsPrompt:
         self.temperature = os.getenv("TEMPERATURE")
         self.model = init_chat_model(self.model_name, model_provider=self.model_provider, temperature=self.temperature)
 
-    def solve(self, question: str, context: Optional[str], show_code: bool):
-        select_fewshot = few_shot_tatqa
+    def solve(self, question: str, context: Optional[str], select_fewshot:str):
         context_str = f"# Context:\n{context}\n" 
         pot_messages = [
         SystemMessage("You will write python program to solve math problems."),
         HumanMessage(content=f"""
                      
         {select_fewshot}
-        
-        # Context:       
-        {context_str}
 
+        # Include a final answer as a single number, no units or symbols.
+        # For each step, provide a very brief explanation in one short sentence only.
+        # The final answer 'MUST' be assigned the variable 'result'.
+        # If the question includes time points, pay attention to time formats.
+        # Before returning the final result, DOUBLE-CHECK each variable assignment and calculation to ensure they match the problem statement.
+        {context_str}
         # Question: {question}
         """)]
         model_invoke=self.model.invoke(pot_messages)
         code = self.extract_code_from_markdown(model_invoke.content)
-
-        if show_code:
-            print("Đang tạo mã nguồn...")
-            print("-" * 50)
-            print("\n" + code + "\n")
         return code
 
     def safe_execute(self, code: str, timeout: int = 5):
@@ -124,39 +119,71 @@ class ProgramOfThoughtsPrompt:
         # Capture output
         old_stdout = io.StringIO()
 
-        try:
-            # Set timeout (Unix only)
-            if hasattr(signal, 'SIGALRM'):
-                signal.signal(signal.SIGALRM, timeout_handler)
-                signal.alarm(timeout)
-            
-            with contextlib.redirect_stdout(old_stdout):
-                exec(code, exec_globals, exec_locals)
-            
-            result = exec_locals.get("result", None)
-            output = old_stdout.getvalue()
+        # Thread-based timeout implementation
+        def execute_code():
+            nonlocal result_container, exception_container
+            try:
+                with contextlib.redirect_stdout(old_stdout):
+                    exec(code, exec_globals, exec_locals)
+                result_container['result'] = exec_locals.get("result", None)
+                result_container['output'] = old_stdout.getvalue()
+                result_container['success'] = True
+            except Exception as e:
+                exception_container['exception'] = e
+        
+        # Containers to store results from thread
+        result_container = {'result': None, 'output': '', 'success': False}
+        exception_container = {'exception': None}
+        
+        # Start execution in a separate thread
+        execution_thread = threading.Thread(target=execute_code)
+        execution_thread.daemon = True  # Dies when main thread dies
+        execution_thread.start()
+        
+        # Wait for completion or timeout
+        execution_thread.join(timeout)
+        
+        if execution_thread.is_alive():
+            # Timeout occurred
+            return "Code execution timed out", False
+        
+        # Check for exceptions
+        if exception_container['exception']:
+            return f"{exception_container['exception']}", False
+        
+        # Check results
+        if result_container['success']:
+            result = result_container['result']
+            output = result_container['output']
             
             if result is not None:
-                return str(result), True
+                return result, True
             elif output:
                 return output.strip(), True
             else:
-                return "❌ Không tìm thấy biến 'result' sau khi thực thi", False
-                
-        except TimeoutException:
-            return "❌ Code execution timed out", False
-        except Exception as e:
-            return f"❌ Lỗi: {e}", False
-        finally:
-            if hasattr(signal, 'SIGALRM'):
-                signal.alarm(0)  # Tắt alarm
+                return "Variable 'result' not found after execution.", False
+        else:
+            return "Code execution failed", False
 
-    def extract_code_from_markdown(self, text):
+    @staticmethod
+    def extract_code_from_markdown(text):
         # Tìm tất cả các đoạn code giữa ```python và ```
         code_blocks = re.findall(r"```python\n(.*?)```", text, re.DOTALL)
         # Gộp các đoạn code lại, cách nhau bởi 2 dòng trống
         return "\n\n".join(block.strip() for block in code_blocks)
+    
+    @staticmethod
+    def exec_node(code: str):
+        try:
+            exec_globals = {}
+            exec(code, exec_globals)
+            result = exec_globals.get("result", None)
 
+            if result is None:
+                return "None"
+            return str(result)
+        except Exception as e:
+            return str(e)
 
     def check_syntax_and_logic(self, code_str):
         # Kiểm tra code có rỗng không
@@ -175,13 +202,11 @@ class ProgramOfThoughtsPrompt:
         except SyntaxError as e:
             print(f"Lỗi: {e}\n")
             print('-' * 50)
-            return f"Lỗi: {e}"
+            return f"{e}"
 
         # Kiểm tra logic cơ bản - code phải có biến result
         if 'result' not in code_str:
-            print("Lỗi: Code phải chứa biến 'result'\n")
-            print('-' * 50)
-            return "Lỗi: Code phải chứa biến 'result'"
+            return "Must contain the variable 'result'"
         
         # Kiểm tra các biến được sử dụng nhưng chưa được định nghĩa
         try:
@@ -307,7 +332,7 @@ class ProgramOfThoughtsPrompt:
                 print(f"⚠️ Biến chưa được định nghĩa: {', '.join(undefined_vars)}")
                 print(f"🔍 Biến đã định nghĩa: {', '.join(sorted(defined_vars))}")
                 print(f"🔍 Biến được sử dụng: {', '.join(sorted(used_vars))}")
-                return f"Lỗi: Biến chưa được định nghĩa: {', '.join(undefined_vars)}"
+                return f"Variable is not defined: {', '.join(undefined_vars)}"
             else:
                 print(f"✅ Tất cả biến đã được định nghĩa đúng cách")
                 
@@ -362,8 +387,4 @@ class ProgramOfThoughtsPrompt:
         """)]
         model_invoke=self.model.invoke(fix_messages)
         code = self.extract_code_from_markdown(model_invoke.content)
-        print(f"\nSửa lỗi trong đoạn mã:")
-        print("-" * 40)
-        print(code)
-        print("-" * 40)
         return code

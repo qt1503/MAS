@@ -1,13 +1,15 @@
-from typing import Literal, Optional, TypedDict
+from typing import List, Literal, Optional, TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 from langsmith import traceable, Client, evaluate
 from dotenv import load_dotenv
+from datetime import datetime
+from .prompts.few_shot_PoT import few_shot_tatqa, few_shot_gsm8k, few_shot_tabmwp
+
 import os
 import json
 import re
 import uuid
-from datetime import datetime
 import sys
 
 # Add the mint directory to the path
@@ -23,81 +25,80 @@ class State(TypedDict):
     context: Optional[str]
     error: Optional[str]
     debug_count: int  
-    show_reasoning: bool
 
 class MultiAgentTesting:
     def __init__(self):
         load_dotenv()
         self.all_results = []
         self.name = ""
-        self.prompt = ProgramOfThoughtsPrompt()  # Sử dụng PoT với safe_execute đã cải thiện
+        self.prompt = ProgramOfThoughtsPrompt()
+        self.current_debug_history = []
         
     def setup_dataset(self, name: str):
         """Setup dataset-specific configurations"""
         self.name = name.lower()
+        if self.name == "gsm8k":
+            self.select_fewshot = few_shot_gsm8k
+        elif self.name == "tatqa":
+            self.select_fewshot = few_shot_tatqa
+        else:
+            self.select_fewshot = few_shot_tabmwp
 
     def PreProcessing(self, state: State):
         state["question"] = re.sub(r'\s+', ' ', state["question"].strip())                      
         return {**state}
 
     def CodeGenerator(self, state: State):
-        generated_code = self.prompt.solve(state["question"], state["context"], state["show_reasoning"])
-        return {**state, "debug_count": state.get('debug_count', 0), "answer": generated_code}
+        if state["error"] is None:
+            generated_code = self.prompt.solve(state["question"], state["context"], self.select_fewshot)
+            return {**state, "answer": generated_code}
+        else:
+            return{**state, "error": None}
 
     def Verifier(self, state: State):
-        print(f"🔍 Verifier: Checking code...")
         error = self.prompt.check_syntax_and_logic(state["answer"])
-        if error:
-            print(f"❌ Verifier: Error found - {error[:100]}...")
-        else:
-            print("✅ Verifier: No errors found")
-        return {**state, "debug_count": state.get('debug_count', 0), "error": error}
+        return {**state, "error": error}
 
     def Executor(self, state: State):
-        print(f"⚡ Executor: Executing code...")
         # Sử dụng prompt.safe_execute đã được cải thiện bảo mật
         result, success = self.prompt.safe_execute(str(state["answer"]))
         if success:
-            print(f"✅ Executor: Success - {result}")
-            return {**state, "debug_count": state.get('debug_count', 0), "answer": result}
+            return {**state, "answer": result}
         else:
-            print(f"❌ Executor: Failed - {result[:100]}...")
-            return {**state, "debug_count": state.get('debug_count', 0), "error": result}
+            return {**state, "error": result}
 
     def Debug_Feedback(self, state: State):
-        print(f"🔧 Debug_Feedback: Fixing error - {state['error'][:100]}...")
         fixed_code = self.prompt.fix_error(state["answer"], state["error"])
-        print(f"✅ Debug_Feedback: Code fixed, debug_count: {state.get('debug_count', 0) + 1}")
-        return {**state, "debug_count": state.get('debug_count', 0) + 1, "error": None, "answer": fixed_code}
+        debug_step = {
+            "error": state["error"],
+            "fixed_code": fixed_code
+        }
+        self.current_debug_history.append(debug_step)
+        return {**state, "debug_count": state.get('debug_count', 0) + 1, "answer": fixed_code}
 
     def Answer(self, state: State):
-        answer = state.get("answer")
-        return {**state, "debug_count": state.get('debug_count', 0)}
+        debug_count = state.get("debug_count")
+        if debug_count == 2:
+            return {**state, "answer": 9999}  # Return a default value if debug_count == 2
+        else:
+            return {**state}
 
     def decide_error(self, state) -> Literal["Executor", "Debug_Feedback"]:
         error = state.get('error', None)
         debug_count = state.get('debug_count', 0)
-        print(f"🔍 decide_error: error={error}, debug_count={debug_count}")
         if debug_count >= 2:
-            print("➡️ Going to Executor (max debug reached)")
             return "Executor"
         if error is None:
-            print("➡️ Going to Executor (no error)")
             return "Executor"
-        print("➡️ Going to Debug_Feedback (error found)")
         return "Debug_Feedback"
 
     def decide_executor(self, state) -> Literal["Answer", "Debug_Feedback"]:
         error = state.get('error', None)
         debug_count = state.get('debug_count', 0)
-        print(f"🔍 decide_executor: error={error}, debug_count={debug_count}")
         if debug_count >= 2:
-            print("➡️ Going to Answer (max debug reached)")
             return "Answer"
         if error is None:
-            print("➡️ Going to Answer (no error)")
             return "Answer"
-        print("➡️ Going to Debug_Feedback (error found)")
         return "Debug_Feedback"
 
     def build_graph(self):
@@ -123,6 +124,9 @@ class MultiAgentTesting:
 
     def run_graph(self, inputs: dict):
         """Run the multi-agent system on a single question"""
+        # Reset debug history cho run mới
+        self.current_debug_history = []
+        
         graph = self.build_graph()
         
         state = State(
@@ -131,7 +135,6 @@ class MultiAgentTesting:
             answer=None,
             error=None,
             debug_count=0,
-            show_reasoning=False
         )
 
         final_state = graph.invoke(
@@ -141,8 +144,7 @@ class MultiAgentTesting:
         
         return {
             "final_answer": str(final_state.get("answer", "")),
-            "debug_count": final_state.get("debug_count", 0),
-            "response": f"Multi-agent system with {final_state.get('debug_count', 0)} debug iterations"
+            "debug": [{"Error": step["error"], "Fixed Code": step["fixed_code"]} for step in self.current_debug_history],
         }
 
     @staticmethod

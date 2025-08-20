@@ -62,15 +62,15 @@ class PoTTesting:
         pot_messages = [
             SystemMessage("You will write python program to solve math problems."),
             HumanMessage(content=f"""
-{self.select_fewshot}
-# Include a final answer as a single number, no units or symbols.
-# For each step, provide a very brief explanation in one short sentence only.
-# The final answer 'MUST' be assigned the variable 'result'.
-# If the question includes time points, pay attention to time formats.
-# Before returning the final result, DOUBLE-CHECK each variable assignment and calculation to ensure they match the problem statement.
-{context_str}
-# Question: {state["question"]}
-""")]
+            {self.select_fewshot}
+            # Include a final answer as a single number, no units or symbols.
+            # For each step, provide a very brief explanation in one short sentence only.
+            # The final answer 'MUST' be assigned the variable 'result'.
+            # If the question includes time points, pay attention to time formats.
+            # Before returning the final result, DOUBLE-CHECK each variable assignment and calculation to ensure they match the problem statement.
+            {context_str}
+            # Question: {state["question"]}
+            """)]
         model_invoke = self.model.invoke(pot_messages)
         code = self.extract_code_from_markdown(model_invoke.content)
         return {**state, "program": code, "response": model_invoke.content}
@@ -172,7 +172,7 @@ class PoTTesting:
         else:
             name_dataset = "TABMWP"
 
-        @traceable(run_type="chain")
+        @traceable(run_type="chain", name="PoT")
         def target_function(inputs: dict):
             result = self.run_graph(inputs)
             return result
