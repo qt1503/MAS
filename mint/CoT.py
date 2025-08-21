@@ -2,7 +2,6 @@ import os
 import re
 import langsmith as ls
 
-from langsmith import get_current_run_tree
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model

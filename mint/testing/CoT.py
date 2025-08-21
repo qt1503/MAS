@@ -201,7 +201,7 @@ class CoTTesting:
                 # Create save_log directory if it doesn't exist
                 os.makedirs("save_log", exist_ok=True)
 
-                with open(f"save_log/CoT_results_{self.name}_{datetime.now().strftime('%d-%m-%Y %H:%M:%S')}_{total}samples.json", "w", encoding="utf-8") as f:
+                with open(f"save_log/CoT_results_{self.name}_{datetime.now().strftime('%d-%m-%Y %H%M%S')}_{total}samples.json", "w", encoding="utf-8") as f:
                     json.dump(summary, f, ensure_ascii=False, indent=2)
 
                 print(f"✅ Kết quả đã được lưu vào save_log/CoT_results - {self.name}__{datetime.now().strftime('%d-%m-%Y %H:%M:%S')}_{total}samples.json")
