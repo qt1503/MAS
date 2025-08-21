@@ -78,8 +78,8 @@ class MultiAgentTesting:
 
     def Answer(self, state: State):
         debug_count = state.get("debug_count")
-        if debug_count == 2:
-            return {**state, "answer": 9999}  # Return a default value if debug_count == 2
+        if debug_count == 2 and state.get("error") is not None:
+            return {**state, "answer": 9999}  # Return a default value if not fixed within two iterations.
         else:
             return {**state}
 
@@ -270,7 +270,7 @@ class MultiAgentTesting:
 
                 os.makedirs("save_log", exist_ok=True)
 
-                with open(f"save_log/MultiAgent_results_{self.name}_{datetime.now().strftime('%d-%m-%Y %H:%M:%S')}_{total}samples.json", "w", encoding="utf-8") as f:
+                with open(f"save_log/MultiAgent_results_{self.name}_{datetime.now().strftime('%d-%m-%Y %H%M%S')}_{total}samples.json", "w", encoding="utf-8") as f:
                     json.dump(summary, f, ensure_ascii=False, indent=2)
                     
                 print(f"✅ Kết quả đã được lưu vào save_log/MultiAgent_results_{self.name}_{datetime.now().strftime('%d-%m-%Y %H:%M:%S')}_{total}samples.json")

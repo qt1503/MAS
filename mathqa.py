@@ -131,9 +131,9 @@ def Debug_Feedback(state: State, prompt):
 def Answer(state: State):
     answer = state.get("answer")
     debug_count = state.get("debug_count")
-    if debug_count == 2:
+    if debug_count == 2 and state.get("error") is not None:
         st.markdown("**Final Answer**: 9999")
-        return {**state, "answer": 9999}  # Return a default value if debug_count == 2
+        return {**state, "answer": 9999}  # Return a default value if not fixed within two iterations.
     else:
         st.markdown(f"**Final Answer**: {answer}")
         return {**state}

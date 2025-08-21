@@ -329,12 +329,7 @@ class ProgramOfThoughtsPrompt:
             undefined_vars = used_vars - defined_vars - builtins_and_modules
             
             if undefined_vars:
-                print(f"⚠️ Biến chưa được định nghĩa: {', '.join(undefined_vars)}")
-                print(f"🔍 Biến đã định nghĩa: {', '.join(sorted(defined_vars))}")
-                print(f"🔍 Biến được sử dụng: {', '.join(sorted(used_vars))}")
                 return f"Variable is not defined: {', '.join(undefined_vars)}"
-            else:
-                print(f"✅ Tất cả biến đã được định nghĩa đúng cách")
                 
         except Exception as e:
             print(f"⚠️ Không thể phân tích biến: {e}")
