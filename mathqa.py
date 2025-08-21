@@ -130,14 +130,13 @@ def Debug_Feedback(state: State, prompt):
 
 def Answer(state: State):
     answer = state.get("answer")
-    debug_count = state.get("debug_count")
-    if debug_count == 2 and state.get("error") is not None:
-        st.markdown("**Final Answer**: 9999")
-        return {**state, "answer": 9999}  # Return a default value if not fixed within two iterations.
-    else:
+    if is_number(answer):
         st.markdown(f"**Final Answer**: {answer}")
         return {**state}
-
+    else:
+        st.markdown("**Final Answer**: 9999")
+        return {**state, "answer": 9999}  # Return a default value if debug_count == 2
+        
 def decide_error(state) -> Literal["Executor", "Debug_Feedback"]:
     error = state.get('error', None)
     debug_count = state.get('debug_count', 0)
@@ -156,6 +155,12 @@ def decide_executor(state) -> Literal["Answer", "Debug_Feedback"]:
         return "Answer"
     return "Debug_Feedback"
 
+def is_number(s: str):
+    try:
+        float(s)   # thử convert sang float
+        return True
+    except ValueError:
+        return False
 
 def check_dataset_exists(dataset_name: str) -> bool:
     """
