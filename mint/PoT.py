@@ -72,7 +72,7 @@ class ProgramOfThoughtsPrompt:
             allowed_modules = {
                 'math', 'random', 'datetime', 'decimal', 'fractions',
                 '_strptime', 'time', 'calendar', 're', 'collections',
-                'itertools', 'statistics'  # Dependencies for datetime and common math modules
+                'itertools', 'statistics', 'sympy'  # Dependencies for datetime and common math modules
             }
             if name in allowed_modules:
                 return __import__(name, globals, locals, fromlist, level)

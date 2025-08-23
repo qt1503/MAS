@@ -165,7 +165,6 @@ MAS/
 ├── mathqa.py                # Web interface and CLI utility for math question solving
 ├── few_shot_PoT.py          # Few-shot Program of Thoughts implementation
 ├── few_shot_PaL.py          # Few-shot Program-aided Language implementation  
-├── fetch_data.ipynb         # Jupyter notebook for fetching and analyzing experiment data
 ├── requirements.txt         # Required dependencies
 ├── env.example              # Environment configuration template
 ├── README_DATASET.md        # Detailed dataset documentation
@@ -202,6 +201,7 @@ MAS/
 │   ├── PoT.py               # Program of Thoughts implementation
 │   ├── PaL.py               # Program-aided Language implementation
 │   ├── dataset_to_langsmith.py  # LangSmith integration tools
+│   ├── fetch_data.ipynb         # Jupyter notebook for fetching and analyzing experiment data
 │   └── testing/             # Testing modules and prompts
 │       ├── CoT.py           # CoT testing implementation
 │       ├── MultiAgent.py    # Multi-agent testing implementation
@@ -218,21 +218,7 @@ MAS/
 │   ├── GSM8K_EDA.ipynb
 │   ├── TATQA_EDA.ipynb
 │   └── TABMWP_EDA.ipynb
-├── results/                 # Processed results from experiments
-│   ├── CoT_GSM8K.json
-│   ├── CoT_TABMWP.json
-│   ├── CoT_TATQA.json
-│   ├── MultiAgent_GSM8K.json
-│   ├── MultiAgent_TABMWP.json
-│   ├── MultiAgent_TATQA.json
-│   ├── PaL_GSM8K.json
-│   ├── PaL_TATQA.json
-│   ├── PoT_GSM8K.json
-│   ├── PoT_TABMWP.json
-│   ├── PoT_TATQA.json
-│   ├── Zero-shot_GSM8K.json
-│   ├── Zero-shot_TABMWP.json
-│   └── Zero-shot_TATQA.json
+├── results                 # Processed results from experiments
 └── save_log                # Detailed logs with timestamps
 
 ```
