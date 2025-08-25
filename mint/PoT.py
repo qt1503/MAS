@@ -72,7 +72,7 @@ class ProgramOfThoughtsPrompt:
             allowed_modules = {
                 'math', 'random', 'datetime', 'decimal', 'fractions',
                 '_strptime', 'time', 'calendar', 're', 'collections',
-                'itertools', 'statistics', 'sympy'  # Dependencies for datetime and common math modules
+                'itertools', 'statistics', 'sympy',  # Dependencies for datetime and common math modules
             }
             if name in allowed_modules:
                 return __import__(name, globals, locals, fromlist, level)
@@ -180,10 +180,10 @@ class ProgramOfThoughtsPrompt:
             result = exec_globals.get("result", None)
 
             if result is None:
-                return "None"
+                return str(9999)
             return str(result)
         except Exception as e:
-            return str(e)
+            return str(9999)
 
     def check_syntax_and_logic(self, code_str):
         # Kiểm tra code có rỗng không
