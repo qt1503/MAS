@@ -52,7 +52,7 @@ def single_question(question: str, method: str):
             st.markdown(f"**Final Answer:** {prompt.exec_node(code)}")
         case "PoT":
             prompt = ProgramOfThoughtsPrompt()
-            code = prompt.solve(question, None)
+            code = prompt.solve(question, None, few_shot_gsm8k)
             st.markdown("**Generated code:**")
             st.code(code, language="python")
             st.markdown(f"**Final Answer:** {prompt.exec_node(code)}")
